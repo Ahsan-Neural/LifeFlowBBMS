@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Data.SqlClient;
 using System.Security.Cryptography;
-using System.Text;
 using System.Windows.Forms;
 using LifeFlowBBMS.DAL;
 
@@ -25,17 +24,50 @@ namespace LifeFlowBBMS.UI
         }
 
         // ─────────────────────────────────────────────────
-        //  SHA256 HASH
+        //  SECURE HASH (PBKDF2 + Salt)
         // ─────────────────────────────────────────────────
         private string HashPassword(string password)
         {
-            using (SHA256 sha256 = SHA256.Create())
+            byte[] salt = new byte[16];
+            using (var rng = RandomNumberGenerator.Create())
+                rng.GetBytes(salt);
+
+            var pbkdf2 = new Rfc2898DeriveBytes(
+                password, salt, 100000, HashAlgorithmName.SHA256);
+
+            byte[] hash = pbkdf2.GetBytes(32);
+            byte[] combined = new byte[48];
+            Buffer.BlockCopy(salt, 0, combined, 0, 16);
+            Buffer.BlockCopy(hash, 0, combined, 16, 32);
+            return Convert.ToBase64String(combined);
+        }
+
+        // ─────────────────────────────────────────────────
+        //  VERIFY HASH
+        // ─────────────────────────────────────────────────
+        private bool VerifyPassword(string enteredPassword, string storedHash)
+        {
+            try
             {
-                byte[] bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
-                StringBuilder sb = new StringBuilder();
-                foreach (byte b in bytes)
-                    sb.Append(b.ToString("x2"));
-                return sb.ToString();
+                byte[] combined = Convert.FromBase64String(storedHash);
+
+                byte[] salt = new byte[16];
+                Buffer.BlockCopy(combined, 0, salt, 0, 16);
+
+                var pbkdf2 = new Rfc2898DeriveBytes(
+                    enteredPassword, salt, 100000, HashAlgorithmName.SHA256);
+
+                byte[] hash = pbkdf2.GetBytes(32);
+
+                for (int i = 0; i < 32; i++)
+                    if (combined[i + 16] != hash[i])
+                        return false;
+
+                return true;
+            }
+            catch
+            {
+                return false;
             }
         }
 
@@ -60,28 +92,41 @@ namespace LifeFlowBBMS.UI
                 return;
             }
 
+            
+
             try
             {
                 using (SqlConnection con = ConnectionManager.GetConnection())
                 {
-                    string query = "SELECT FullName, RoleName FROM Users " +
-                                   "WHERE Username=@Username AND PasswordHash=@Password AND IsActive=1";
+                    string query = "SELECT FullName, RoleName, PasswordHash FROM Users " +
+                                   "WHERE Username=@Username AND IsActive=1";
 
                     SqlCommand cmd = new SqlCommand(query, con);
                     cmd.Parameters.AddWithValue("@Username", txtUsername.Text.Trim());
-                    cmd.Parameters.AddWithValue("@Password", HashPassword(txtPassword.Text.Trim()));
 
                     con.Open();
                     SqlDataReader dr = cmd.ExecuteReader();
 
                     if (dr.Read())
                     {
-                        string fullName = dr["FullName"].ToString();
-                        string role = dr["RoleName"].ToString();
+                        string storedHash = dr["PasswordHash"].ToString();
 
-                        FrmDashboard dashboard = new FrmDashboard(fullName, role);
-                        dashboard.Show();
-                        this.Hide();
+                        if (VerifyPassword(txtPassword.Text.Trim(), storedHash))
+                        {
+                            string fullName = dr["FullName"].ToString();
+                            string role = dr["RoleName"].ToString();
+
+                            FrmDashboard dashboard = new FrmDashboard(fullName, role);
+                            dashboard.Show();
+                            this.Hide();
+                        }
+                        else
+                        {
+                            MessageBox.Show("Invalid username or password.", "Login Failed",
+                                MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            txtPassword.Clear();
+                            txtPassword.Focus();
+                        }
                     }
                     else
                     {

@@ -2,7 +2,6 @@
 using System.Data.SqlClient;
 using System.Drawing;
 using System.Security.Cryptography;
-using System.Text;
 using System.Windows.Forms;
 using LifeFlowBBMS.DAL;
 
@@ -29,17 +28,50 @@ namespace LifeFlowBBMS.UI
         }
 
         // ─────────────────────────────────────────────────
-        //  SHA256 HASH
+        //  SECURE HASH (PBKDF2 + Salt)
         // ─────────────────────────────────────────────────
         private string HashPassword(string password)
         {
-            using (SHA256 sha256 = SHA256.Create())
+            byte[] salt = new byte[16];
+            using (var rng = RandomNumberGenerator.Create())
+                rng.GetBytes(salt);
+
+            var pbkdf2 = new Rfc2898DeriveBytes(
+                password, salt, 100000, HashAlgorithmName.SHA256);
+
+            byte[] hash = pbkdf2.GetBytes(32);
+            byte[] combined = new byte[48];
+            Buffer.BlockCopy(salt, 0, combined, 0, 16);
+            Buffer.BlockCopy(hash, 0, combined, 16, 32);
+            return Convert.ToBase64String(combined);
+        }
+
+        // ─────────────────────────────────────────────────
+        //  VERIFY HASH
+        // ─────────────────────────────────────────────────
+        private bool VerifyPassword(string enteredPassword, string storedHash)
+        {
+            try
             {
-                byte[] bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
-                StringBuilder sb = new StringBuilder();
-                foreach (byte b in bytes)
-                    sb.Append(b.ToString("x2"));
-                return sb.ToString();
+                byte[] combined = Convert.FromBase64String(storedHash);
+
+                byte[] salt = new byte[16];
+                Buffer.BlockCopy(combined, 0, salt, 0, 16);
+
+                var pbkdf2 = new Rfc2898DeriveBytes(
+                    enteredPassword, salt, 100000, HashAlgorithmName.SHA256);
+
+                byte[] hash = pbkdf2.GetBytes(32);
+
+                for (int i = 0; i < 32; i++)
+                    if (combined[i + 16] != hash[i])
+                        return false;
+
+                return true;
+            }
+            catch
+            {
+                return false;
             }
         }
 
@@ -207,6 +239,7 @@ namespace LifeFlowBBMS.UI
 
                     if (_userId == -1)
                     {
+                        // NEW USER — always hash the new password
                         cmd = new SqlCommand(@"INSERT INTO Users
                             (FullName, Username, PasswordHash, RoleName, IsActive)
                             VALUES (@fullname, @username, @password, @role, @isactive)", con);
@@ -217,6 +250,7 @@ namespace LifeFlowBBMS.UI
                     {
                         if (!string.IsNullOrWhiteSpace(txtPassword.Text))
                         {
+                            // EDIT USER — password field filled, update with new hash
                             cmd = new SqlCommand(@"UPDATE Users SET
                                 FullName=@fullname, Username=@username,
                                 PasswordHash=@password, RoleName=@role,
@@ -227,6 +261,7 @@ namespace LifeFlowBBMS.UI
                         }
                         else
                         {
+                            // EDIT USER — password field empty, keep existing hash
                             cmd = new SqlCommand(@"UPDATE Users SET
                                 FullName=@fullname, Username=@username,
                                 RoleName=@role, IsActive=@isactive
