@@ -329,7 +329,7 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 ## 👨‍💻 Author
 
-**Ahsan** — Final Year AI Student  
+**Ahsan** —  BSAI Student  
 *Passionate about healthcare technology and software development*
 
 **GitHub:** [Ahsan-Neural](https://github.com/Ahsan-Neural)
