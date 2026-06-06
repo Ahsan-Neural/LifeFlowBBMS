@@ -15,9 +15,9 @@
 
 ## 📖 About
 
-**LifeFlowBBMS** is a comprehensive Windows desktop application built with **C# and WinForms** that streamlines blood bank operations. Designed for efficiency and ease of use, it replaces manual record-keeping with an automated, secure system.
+**LifeFlowBBMS** is a comprehensive Windows desktop application built with **C# and WinForms** that streamlines blood bank operations. Designed for efficiency and ease of use, it replaces manual record-keeping with an automated, secure, and scalable system.
 
-This is a **University Final Year Project** demonstrating secure database management, user authentication, and business logic implementation for healthcare operations.
+This is a **Semester Six Course Project** for Visual Programming, demonstrating secure database management, user authentication, and business logic implementation for healthcare operations.
 
 ---
 
@@ -123,7 +123,7 @@ LifeFlowBBMS/
 - Automatic inventory deduction
 - Audit trail for all modifications
 
-### 📊 Reports & Analytics
+### �� Reports & Analytics
 - Donation statistics and trends
 - Blood usage analytics
 - Inventory reports
@@ -268,7 +268,7 @@ nuget restore
 - **UI Forms:** 12+ for different operations
 - **Database Tables:** 8+ core tables with relationships
 - **Lines of Code:** 5000+ lines of secure code
-- **Development:** University Final-Year Project
+- **Development:** Semester Six Course Project for Visual Programming
 
 ---
 
