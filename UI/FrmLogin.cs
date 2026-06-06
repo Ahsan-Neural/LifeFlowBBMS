@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Data.SqlClient;
 using System.Security.Cryptography;
 using System.Windows.Forms;
@@ -65,8 +65,18 @@ namespace LifeFlowBBMS.UI
 
                 return true;
             }
-            catch
+            catch (FormatException fex)
             {
+                // Log format errors for debugging
+                SecurityLogger.LogSecurity("PasswordVerificationError", $"Format error: {fex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[SECURITY] Password hash format error: {fex.Message}");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                // Log unexpected errors
+                SecurityLogger.LogError("FrmLogin.VerifyPassword", $"Unexpected error during password verification", ex);
+                System.Diagnostics.Debug.WriteLine($"[SECURITY] Password verification error: {ex.GetType().Name} - {ex.Message}");
                 return false;
             }
         }
@@ -76,7 +86,10 @@ namespace LifeFlowBBMS.UI
         // ─────────────────────────────────────────────────
         private void btnLogin_Click(object sender, EventArgs e)
         {
-            if (txtUsername.Text.Trim() == "")
+            string username = txtUsername.Text.Trim();
+            string password = txtPassword.Text.Trim();
+
+            if (string.IsNullOrEmpty(username))
             {
                 MessageBox.Show("Please enter username.", "Validation",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -84,15 +97,13 @@ namespace LifeFlowBBMS.UI
                 return;
             }
 
-            if (txtPassword.Text.Trim() == "")
+            if (string.IsNullOrEmpty(password))
             {
                 MessageBox.Show("Please enter password.", "Validation",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 txtPassword.Focus();
                 return;
             }
-
-            
 
             try
             {
@@ -102,7 +113,7 @@ namespace LifeFlowBBMS.UI
                                    "WHERE Username=@Username AND IsActive=1";
 
                     SqlCommand cmd = new SqlCommand(query, con);
-                    cmd.Parameters.AddWithValue("@Username", txtUsername.Text.Trim());
+                    cmd.Parameters.AddWithValue("@Username", username);
 
                     con.Open();
                     SqlDataReader dr = cmd.ExecuteReader();
@@ -111,10 +122,14 @@ namespace LifeFlowBBMS.UI
                     {
                         string storedHash = dr["PasswordHash"].ToString();
 
-                        if (VerifyPassword(txtPassword.Text.Trim(), storedHash))
+                        if (VerifyPassword(password, storedHash))
                         {
                             string fullName = dr["FullName"].ToString();
                             string role = dr["RoleName"].ToString();
+
+                            // Log successful login
+                            SecurityLogger.LogSuccessfulLogin(username);
+                            SecurityLogger.LogAudit(username, "LOGIN_SUCCESS", $"User role: {role}");
 
                             FrmDashboard dashboard = new FrmDashboard(fullName, role);
                             dashboard.Show();
@@ -122,6 +137,10 @@ namespace LifeFlowBBMS.UI
                         }
                         else
                         {
+                            // Log failed authentication attempt
+                            SecurityLogger.LogFailedLogin(username, "Invalid password");
+                            SecurityLogger.LogAudit(username, "LOGIN_FAILED", "Invalid password");
+                            
                             MessageBox.Show("Invalid username or password.", "Login Failed",
                                 MessageBoxButtons.OK, MessageBoxIcon.Error);
                             txtPassword.Clear();
@@ -130,6 +149,10 @@ namespace LifeFlowBBMS.UI
                     }
                     else
                     {
+                        // Log failed login attempt (user not found)
+                        SecurityLogger.LogFailedLogin(username, "User not found");
+                        SecurityLogger.LogAudit(username, "LOGIN_FAILED", "User not found or inactive");
+                        
                         MessageBox.Show("Invalid username or password.", "Login Failed",
                             MessageBoxButtons.OK, MessageBoxIcon.Error);
                         txtPassword.Clear();
@@ -137,10 +160,19 @@ namespace LifeFlowBBMS.UI
                     }
                 }
             }
+            catch (SqlException sqlEx)
+            {
+                SecurityLogger.LogError("FrmLogin.btnLogin_Click", "SQL Connection Error", sqlEx);
+                System.Diagnostics.Debug.WriteLine($"[ERROR] SQL Connection Error: {sqlEx.Message}");
+                MessageBox.Show("Unable to connect to database. Please check your connection settings.",
+                    "Connection Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
             catch (Exception ex)
             {
-                MessageBox.Show("Database error: " + ex.Message, "Error",
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                SecurityLogger.LogError("FrmLogin.btnLogin_Click", "Unexpected error during login", ex);
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Unexpected error during login: {ex.GetType().Name} - {ex.Message}");
+                MessageBox.Show("An unexpected error occurred. Please try again.",
+                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
